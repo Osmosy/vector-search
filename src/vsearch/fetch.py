@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, Optional
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -45,7 +45,7 @@ class FetchResult:
     text: str = ""
     redirects: list[str] = field(default_factory=list)
     title: str = ""
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def ok(self) -> bool:

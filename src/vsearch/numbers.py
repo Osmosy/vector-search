@@ -9,9 +9,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Iterable, Optional
 
 # Разряды могут отделяться пробелом (в том числе неразрывным), запятой или точкой.
 _NUMBER_RE = re.compile(
@@ -53,7 +53,7 @@ def _strip_spaces(s: str) -> str:
     return re.sub(r"[ \u00a0\u202f]", "", s)
 
 
-def parse_body(body: str) -> Optional[Decimal]:
+def parse_body(body: str) -> Decimal | None:
     """«1 999,5» → 1999.5; «1.234,56» → 1234.56; «1,5» → 1.5."""
     b = _strip_spaces(body)
     if not b:
@@ -99,7 +99,7 @@ def extract_numbers(text: str) -> list[Number]:
     return out
 
 
-def normalize_number(text: str) -> Optional[Number]:
+def normalize_number(text: str) -> Number | None:
     """Первое число строки, если строка — это только число с единицей."""
     nums = extract_numbers(text)
     return nums[0] if nums else None

@@ -8,9 +8,13 @@ import sys
 from pathlib import Path
 
 from .claims import ClaimError, claims_from_json
+from .extract import html_to_text
 from .fetch import fetch
 from .ledger import Ledger
 from .numbers import extract_numbers
+from .products import build_answer, parse_offers
+from .research import Budget, ResearchSession, summarize
+from .search import DuckDuckGoSearch, StaticSearch, hits_from_json
 from .verify import receipt, summary, verify
 
 
@@ -71,6 +75,72 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
+def _cmd_research(args: argparse.Namespace) -> int:
+    ledger = Ledger(args.ledger)
+    if args.hits:
+        provider = StaticSearch(hits_from_json(json.loads(Path(args.hits).read_text(encoding="utf-8"))))
+    else:
+        provider = DuckDuckGoSearch()
+    budget = Budget(
+        max_rounds=args.rounds,
+        max_fetches=args.fetches,
+        per_round=args.per_round,
+        min_chars=args.min_chars,
+        page_timeout=args.timeout,
+    )
+    session = ResearchSession(ledger, provider, budget=budget)
+    result = session.run(args.questions)
+    print(summarize(result))
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"журнал исследования: {out}")
+    return 0 if result.answered else 1
+
+
+def _cmd_products(args: argparse.Namespace) -> int:
+    if args.file:
+        text = Path(args.file).read_text(encoding="utf-8")
+        if args.file.lower().endswith((".html", ".htm")):
+            text = html_to_text(text)
+        ledger: Ledger = _SelfLedger(text)
+        source_id = 1
+    elif args.source is not None:
+        ledger = Ledger(args.ledger)
+        try:
+            text = ledger.text(args.source)
+        except Exception as exc:  # noqa: BLE001 — причина отказа важнее типа
+            print(f"ОТКАЗ: {exc}", file=sys.stderr)
+            return 1
+        source_id = args.source
+    else:
+        print("нужен --source ID или --file путь", file=sys.stderr)
+        return 1
+
+    offers = parse_offers(text, source_id)
+    accepted, rejected = build_answer(offers, ledger)
+    for line in accepted:
+        print(f"ОК: {line}")
+    for offer, errors in rejected:
+        print(f"ОТКЛОНЕНО: {offer.name} — {'; '.join(errors)}", file=sys.stderr)
+    if not offers:
+        print("ОТКАЗ: в тексте не найдено ни одного предложения с ценой", file=sys.stderr)
+        return 1
+    if args.strict and rejected:
+        return 1
+    return 0 if accepted else 1
+
+
+class _SelfLedger(Ledger):
+    """Журнал из одного текста без файла: только для --file."""
+
+    def __init__(self, text: str) -> None:  # noqa: D107 — простой контейнер
+        import tempfile
+
+        super().__init__(Path(tempfile.mkdtemp()) / "ledger.jsonl")
+        self.add(url="file://local", status=200, content_type="text/plain", text=text)
+
+
 def _cmd_numbers(args: argparse.Namespace) -> int:
     text = Path(args.file).read_text(encoding="utf-8") if args.file else sys.stdin.read()
     for num in extract_numbers(text):
@@ -97,6 +167,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_verify.add_argument("--no-evidence", action="store_true", help="не требовать дословную цитату")
     p_verify.add_argument("--receipt", help="куда записать квитанцию (markdown)")
     p_verify.set_defaults(func=_cmd_verify)
+
+    p_research = sub.add_parser("research", help="раунды поиска и чтения с бюджетом")
+    p_research.add_argument("questions", nargs="+")
+    p_research.add_argument("--ledger", default="data/ledger.jsonl")
+    p_research.add_argument("--hits", help="файл выдачи для офлайна: {запрос: [{title,url}]}")
+    p_research.add_argument("--rounds", type=int, default=4)
+    p_research.add_argument("--fetches", type=int, default=16)
+    p_research.add_argument("--per-round", type=int, default=5)
+    p_research.add_argument("--min-chars", type=int, default=400)
+    p_research.add_argument("--timeout", type=float, default=60.0)
+    p_research.add_argument("--out", default="data/research.json")
+    p_research.set_defaults(func=_cmd_research)
+
+    p_products = sub.add_parser("products", help="сверить товарные предложения с текстом источника")
+    p_products.add_argument("--ledger", default="data/ledger.jsonl")
+    p_products.add_argument("--source", type=int, help="номер источника в журнале")
+    p_products.add_argument("--file", help="текст страницы из файла")
+    p_products.add_argument("--strict", action="store_true", help="ненулевой код при любом отклонении")
+    p_products.set_defaults(func=_cmd_products)
 
     p_numbers = sub.add_parser("numbers", help="показать числа, как их видит сверка")
     p_numbers.add_argument("file", nargs="?")

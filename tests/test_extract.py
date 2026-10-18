@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from vsearch.extract import html_title, html_to_text, looks_like_captcha, pdf_to_text
-
 from tests.conftest import HTML_ARTICLE, HTML_CAPTCHA
+from vsearch.extract import html_title, html_to_text, looks_like_captcha, pdf_to_text
 
 
 def test_html_text_skips_scripts_and_styles() -> None:

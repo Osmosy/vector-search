@@ -8,7 +8,6 @@ import subprocess
 import tempfile
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Optional
 
 _SKIP_TAGS = {"script", "style", "noscript", "template", "svg", "head"}
 _BLOCK_TAGS = {
@@ -114,7 +113,7 @@ def pdf_bytes_to_text(data: bytes) -> tuple[str, dict[str, int]]:
         tmp.unlink(missing_ok=True)
 
 
-def looks_like_captcha(text: str, headers: Optional[dict[str, str]] = None) -> bool:
+def looks_like_captcha(text: str, headers: dict[str, str] | None = None) -> bool:
     """Грубая эвристика: страница-заглушка вместо содержимого."""
     low = text.lower()[:2000]
     markers = (

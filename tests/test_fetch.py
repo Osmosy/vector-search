@@ -43,7 +43,8 @@ def test_host_resolving_to_private_blocked() -> None:
 
 def test_200_html_read() -> None:
     html = "<html><head><title>T</title></head><body>" + ("текст страницы " * 60) + "</body></html>"
-    client = _client(lambda request: httpx.Response(200, headers={"content-type": "text/html; charset=utf-8"}, text=html))
+    headers = {"content-type": "text/html; charset=utf-8"}
+    client = _client(lambda request: httpx.Response(200, headers=headers, text=html))
     result = fetch("https://example.com/a", client=client, resolver=PUBLIC, min_chars=100)
     assert result.ok, result.error
     assert result.status == 200

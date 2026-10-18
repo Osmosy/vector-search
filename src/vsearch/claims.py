@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 from .ledger import Ledger, LedgerError
 from .numbers import numbers_in_text
@@ -48,7 +49,7 @@ class Claim:
     numbers: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_mapping(cls, obj: Mapping[str, Any], *, index: int | None = None) -> "Claim":
+    def from_mapping(cls, obj: Mapping[str, Any], *, index: int | None = None) -> Claim:
         if not isinstance(obj, Mapping):
             raise ClaimError("утверждение должно быть объектом")
         text = str(obj.get("text") or "").strip()

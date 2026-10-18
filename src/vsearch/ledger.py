@@ -12,9 +12,10 @@ import hashlib
 import json
 import os
 import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 
 class LedgerError(Exception):
@@ -41,7 +42,7 @@ class Source:
     sha256: str
     provider: str
     redirects: list[str] = field(default_factory=list)
-    error: Optional[str] = None
+    error: str | None = None
     title: str = ""
 
     @property
@@ -86,13 +87,13 @@ class Ledger:
     def __iter__(self) -> Iterator[Source]:
         return iter(sorted(self._by_id.values(), key=lambda s: s.id))
 
-    def get(self, source_id: int) -> Optional[Source]:
+    def get(self, source_id: int) -> Source | None:
         return self._by_id.get(source_id)
 
     def __contains__(self, source_id: object) -> bool:
         return source_id in self._by_id
 
-    def by_url(self, url: str) -> Optional[Source]:
+    def by_url(self, url: str) -> Source | None:
         for src in self._by_id.values():
             if src.url == url or src.final_url == url:
                 return src
