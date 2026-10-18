@@ -1,6 +1,6 @@
 [project]
 name = "vector-search"
-version = "0.3.0"
+version = "0.4.0"
 description = "Verified retrieval: every claim in a decision traced to fetched bytes"
 readme = "README.md"
 requires-python = ">=3.11"

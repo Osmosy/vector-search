@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from .browser import BskRenderer
 from .claims import ClaimError, claims_from_json
 from .dossier import SufficiencyError, check_dossier, summarize_dossier
 from .extract import html_to_text
@@ -21,11 +22,14 @@ from .verify import receipt, summary, verify
 
 def _cmd_fetch(args: argparse.Namespace) -> int:
     ledger = Ledger(args.ledger)
+    renderer = BskRenderer() if args.browser else None
     result = fetch(
         args.url,
         timeout=args.timeout,
         min_chars=args.min_chars,
         max_bytes=args.max_bytes,
+        allow_browser=args.browser,
+        renderer=renderer,
     )
     src = ledger.add(
         url=result.url,
@@ -36,11 +40,12 @@ def _cmd_fetch(args: argparse.Namespace) -> int:
         redirects=result.redirects,
         error=result.error,
         title=result.title,
+        provider=result.provider,
     )
     if src.ok:
         print(
             f"[{src.id}] {src.status} {src.chars} симв. {src.sha256[:12]} "
-            f"{src.content_type or '—'} {src.final_url}"
+            f"{src.content_type or '—'} {src.provider} {src.final_url}"
         )
         return 0
     print(f"[{src.id}] ОТКАЗ: {src.error}", file=sys.stderr)
@@ -109,7 +114,12 @@ def _cmd_research(args: argparse.Namespace) -> int:
         min_chars=args.min_chars,
         page_timeout=args.timeout,
     )
-    session = ResearchSession(ledger, provider, budget=budget)
+    fetcher = fetch
+    if args.browser:
+        from functools import partial
+
+        fetcher = partial(fetch, allow_browser=True, renderer=BskRenderer())
+    session = ResearchSession(ledger, provider, budget=budget, fetcher=fetcher)
     result = session.run(args.questions)
     print(summarize(result))
     out = Path(args.out)
@@ -179,6 +189,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_fetch.add_argument("--timeout", type=float, default=60.0)
     p_fetch.add_argument("--min-chars", type=int, default=400)
     p_fetch.add_argument("--max-bytes", type=int, default=5 * 1024 * 1024)
+    p_fetch.add_argument("--browser", action="store_true", help="рендерить JS-страницы через bsk")
     p_fetch.set_defaults(func=_cmd_fetch)
 
     p_verify = sub.add_parser("verify", help="проверить утверждения против журнала")
@@ -207,6 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_research.add_argument("--min-chars", type=int, default=400)
     p_research.add_argument("--timeout", type=float, default=60.0)
     p_research.add_argument("--out", default="data/research.json")
+    p_research.add_argument("--browser", action="store_true", help="рендерить JS-страницы через bsk")
     p_research.set_defaults(func=_cmd_research)
 
     p_products = sub.add_parser("products", help="сверить товарные предложения с текстом источника")

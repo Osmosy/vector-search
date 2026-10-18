@@ -101,3 +101,52 @@ def test_too_many_redirects() -> None:
     result = fetch("https://example.com/a", client=client, resolver=PUBLIC, max_redirects=2)
     assert not result.ok
     assert "редиректов" in (result.error or "")
+
+
+class FakeRenderer:
+    name = "fake"
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.calls: list[str] = []
+
+    def available(self) -> bool:
+        return True
+
+    def render(self, url: str, timeout: float = 60.0):
+        from vsearch.browser import RenderResult
+
+        self.calls.append(url)
+        return RenderResult(text=self.text, title="JS page", provider="browser:fake")
+
+
+def test_js_shell_without_browser_is_refused() -> None:
+    shell = "<html><body><div id=app></div><script>render()</script>" \
+            "<noscript>Please enable JavaScript to use this site</noscript></body></html>"
+    client = _client(lambda request: httpx.Response(200, headers={"content-type": "text/html"}, text=shell))
+    result = fetch("https://example.com/a", client=client, resolver=PUBLIC)
+    assert not result.ok
+    assert "JavaScript" in (result.error or "")
+
+
+def test_js_shell_rendered_with_browser() -> None:
+    shell = "<html><body><div id=app></div><script>render()</script>" \
+            "<noscript>Please enable JavaScript to use this site</noscript></body></html>"
+    client = _client(lambda request: httpx.Response(200, headers={"content-type": "text/html"}, text=shell))
+    renderer = FakeRenderer("Отрендеренный текст страницы. " * 40)
+    result = fetch("https://example.com/a", client=client, resolver=PUBLIC,
+                   allow_browser=True, renderer=renderer)
+    assert result.ok, result.error
+    assert result.provider == "browser:fake"
+    assert renderer.calls == ["https://example.com/a"]
+    assert result.title == "JS page"
+
+
+def test_browser_not_used_for_normal_page() -> None:
+    html = "<html><body><p>" + ("нормальный текст " * 60) + "</p></body></html>"
+    client = _client(lambda request: httpx.Response(200, headers={"content-type": "text/html"}, text=html))
+    renderer = FakeRenderer("другой текст " * 100)
+    result = fetch("https://example.com/a", client=client, resolver=PUBLIC,
+                   allow_browser=True, renderer=renderer)
+    assert result.ok
+    assert renderer.calls == []

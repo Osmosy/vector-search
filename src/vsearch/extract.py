@@ -133,3 +133,18 @@ def looks_like_captcha(text: str, headers: dict[str, str] | None = None) -> bool
             if key in {k.lower() for k in headers}:
                 return True
     return False
+
+
+def looks_like_js_placeholder(text: str) -> bool:
+    """Страница отдала оболочку, а содержимое собирает JavaScript."""
+    low = text.lower()[:3000]
+    markers = (
+        "enable javascript",
+        "javascript is disabled",
+        "requires javascript",
+        "interactive scripts did not run",
+        "you need to enable javascript",
+        "please enable js",
+        "включите javascript",
+    )
+    return any(marker in low for marker in markers)

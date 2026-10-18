@@ -16,7 +16,14 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from .extract import html_title, html_to_text, looks_like_captcha, pdf_bytes_to_text
+from .browser import BrowserError, Renderer
+from .extract import (
+    html_title,
+    html_to_text,
+    looks_like_captcha,
+    looks_like_js_placeholder,
+    pdf_bytes_to_text,
+)
 
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_MAX_BYTES = 5 * 1024 * 1024
@@ -45,6 +52,7 @@ class FetchResult:
     text: str = ""
     redirects: list[str] = field(default_factory=list)
     title: str = ""
+    provider: str = "httpx"
     error: str | None = None
 
     @property
@@ -119,6 +127,8 @@ def fetch(
     max_redirects: int = DEFAULT_MAX_REDIRECTS,
     client: httpx.Client | None = None,
     resolver: Resolver | None = None,
+    renderer: Renderer | None = None,
+    allow_browser: bool = False,
 ) -> FetchResult:
     """Прочитать страницу или вернуть причину отказа. Ошибка — не текст."""
     result = FetchResult(url=url, final_url=url)
@@ -167,6 +177,7 @@ def fetch(
                 result.error = f"{current}: ответ больше лимита {max_bytes} байт"
                 return result
 
+            js_shell = False
             if ctype == "application/pdf":
                 text, stats = pdf_bytes_to_text(data)
                 if stats["pages"] and stats["pages_with_text"] == 0:
@@ -176,13 +187,36 @@ def fetch(
                 html = data.decode(_charset(response.headers.get("content-type", "")), "replace")
                 result.title = html_title(html)
                 text = html_to_text(html)
+                # Маркер JS часто спрятан в <noscript>, который парсер выбрасывает.
+                js_shell = looks_like_js_placeholder(text) or looks_like_js_placeholder(html)
 
             if looks_like_captcha(text, dict(response.headers)):
                 result.error = f"{current}: страница похожа на капчу или блокировку"
                 return result
-            if len(text) < min_chars:
+
+            thin = len(text) < min_chars
+
+            if (thin or js_shell) and allow_browser and renderer is not None:
+                try:
+                    rendered = renderer.render(current, timeout=timeout)
+                except BrowserError as exc:
+                    result.error = f"{current}: браузер не отрендерил: {exc}"
+                    return result
+                if len(rendered.text) < min_chars:
+                    result.error = (
+                        f"{current}: после рендера {len(rendered.text)} символов, "
+                        f"меньше порога {min_chars}"
+                    )
+                    return result
+                result.text = rendered.text
+                result.title = rendered.title or result.title
+                result.provider = rendered.provider
+                return result
+
+            if thin:
                 result.error = (
                     f"{current}: текста {len(text)} символов, меньше порога {min_chars}"
+                    + (" (страница собирается JavaScript, браузер не разрешён)" if js_shell else "")
                 )
                 return result
 

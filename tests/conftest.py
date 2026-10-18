@@ -78,4 +78,5 @@ def pdf_scan(tmp_path: Path) -> Path:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line("markers", "network: тест требует выхода в сеть (по умолчанию не запускается)")
+    config.addinivalue_line("markers", "network: тест требует выхода в сеть (нужен VSEARCH_NETWORK=1)")
+    config.addinivalue_line("markers", "browser: тест требует запущенного браузера и bsk")

@@ -1,0 +1,31 @@
+# Живые проверки: сеть и браузер. Запускаются вручную — внешние сайты не должны
+# ронять обычный CI.
+name: network
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: poppler
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+
+      - name: Зависимости
+        run: uv sync --locked
+
+      - name: Живая сеть
+        env:
+          VSEARCH_NETWORK: "1"
+        run: uv run pytest -m "network and not browser" -v
