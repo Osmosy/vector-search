@@ -51,6 +51,17 @@ def test_year_as_date_is_not_a_deadline() -> None:
     assert critical_reason("срок 2 года") is not None
 
 
+@pytest.mark.parametrize(
+    ("text", "marker"),
+    [("Цена существенно ниже рынка", "существенно"), ("Выросла в разы", "в разы"),
+     ("Примерно 1 999 ₽", "Примерно")],
+)
+def test_vague_marker_found(text: str, marker: str) -> None:
+    from vsearch.numbers import vague_reason
+
+    assert vague_reason(text) == marker
+
+
 def test_claim_without_flag_gets_critical_inferred() -> None:
     claim = Claim.from_mapping({"text": "Цена 1 999 ₽", "source_ids": [1], "quote": "цена 1 999 ₽"})
     assert claim.critical is True
@@ -128,3 +139,28 @@ def test_explicit_opt_out_produces_warning(tmp_path) -> None:
     report = verify([claim], ledger)
     assert report.ok
     assert any("объявлено необязательным" in w for w in report.warnings)
+
+
+def test_vague_claim_without_number_is_refused(tmp_path) -> None:
+    text = "Смартфон X200. Цена существенно ниже рынка. В наличии."
+    ledger = _ledger_with(tmp_path, ["https://shop.example.com/x200"], text)
+    claim = Claim.from_mapping(
+        {"id": 1, "text": "Цена X200 существенно ниже рынка", "source_ids": [1],
+         "quote": "Цена существенно ниже рынка"}
+    )
+    errors = validate_claim(claim, ledger)
+    assert any("оценка без числа" in e and "существенно" in e for e in errors)
+
+
+def test_vague_claim_with_number_is_warning(tmp_path) -> None:
+    text = "Смартфон X200. Цена примерно 1 999 ₽. В наличии."
+    ledger = _ledger_with(
+        tmp_path, ["https://shop.example.com/x200", "https://other.org/x200"], text
+    )
+    claim = Claim.from_mapping(
+        {"id": 1, "text": "Цена X200 примерно 1 999 ₽", "source_ids": [1, 2],
+         "quote": "Смартфон X200. Цена примерно 1 999 ₽", "numbers": ["1 999 ₽"]}
+    )
+    report = verify([claim], ledger)
+    assert report.ok, report.errors
+    assert any("допуском 0,1" in w for w in report.warnings)

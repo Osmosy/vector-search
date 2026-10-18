@@ -13,7 +13,7 @@ from typing import Any
 
 from .domains import registrable_domain
 from .ledger import Ledger, LedgerError
-from .numbers import critical_reason, numbers_in_text
+from .numbers import critical_reason, numbers_in_text, vague_reason
 
 MIN_QUOTE_WORDS = 3
 
@@ -133,6 +133,12 @@ def validate_claim(
             key = _match_key(claim.quote)
             if texts and not any(key in _match_key(t) for t in texts.values()):
                 errors.append("цитата не найдена дословно ни в одном из указанных источников")
+
+    vague = vague_reason(claim.text)
+    if vague and not claim.numbers:
+        errors.append(
+            f"оценка без числа: «{vague}» — раскройте числом или уберите формулировку"
+        )
 
     if claim.numbers:
         if not texts:

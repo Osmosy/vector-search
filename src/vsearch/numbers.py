@@ -145,6 +145,43 @@ def critical_reason(*texts: str) -> str | None:
     return None
 
 
+# Качественные оценки: «существенно», «в разы», «примерно». Сами по себе они
+# не проверяемы — либо рядом стоит число, либо утверждение ничего не говорит.
+_VAGUE_MARKERS = (
+    "незначительн",
+    "существенн",
+    "значительн",
+    "в разы",
+    "многократн",
+    "кардинальн",
+    "почти",
+    "примерно",
+    "приблизительн",
+    "около",
+    "порядка",
+    "немного",
+    "слегка",
+    "несколько",
+)
+
+
+def vague_reason(text: str) -> str | None:
+    """Первая качественная оценка в тексте («существенно», «примерно») или None."""
+    low = str(text).lower()
+    for marker in _VAGUE_MARKERS:
+        pos = low.find(marker)
+        if pos < 0:
+            continue
+        # Маркер из нескольких слов («в разы») возвращается целиком.
+        if " " in marker:
+            return str(text)[pos : pos + len(marker)].strip(" .,;:()")
+        # Вернуть слово целиком, а не основу: «существенно снизилась».
+        start = low.rfind(" ", 0, pos) + 1
+        end = low.find(" ", pos)
+        return str(text)[start : end if end > 0 else len(str(text))].strip(" .,;:()")
+    return None
+
+
 def normalize_number(text: str) -> Number | None:
     """Первое число строки, если строка — это только число с единицей."""
     nums = extract_numbers(text)

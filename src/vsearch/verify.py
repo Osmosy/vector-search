@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 from .claims import Claim, validate_claim
 from .ledger import Ledger, Source
-from .numbers import critical_reason
+from .numbers import critical_reason, vague_reason
 
 
 @dataclass
@@ -42,6 +42,13 @@ def verify(
     for claim in claims:
         errs = validate_claim(claim, ledger, require_evidence=require_evidence)
         report.per_claim[claim.id] = errs
+        if claim.numbers:
+            vague = vague_reason(claim.text)
+            if vague:
+                report.warnings.append(
+                    f"утверждение [{claim.id}] «{_short(claim.text)}»: оценка «{vague}» "
+                    "с числом — сверка идёт с допуском 0,1 %, округление не покрывается"
+                )
         if claim.critical_source == "declared" and not claim.critical:
             reason = critical_reason(claim.text, *claim.numbers)
             if reason:
