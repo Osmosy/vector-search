@@ -70,3 +70,48 @@ def test_answer_never_invents_price(ledger: Ledger) -> None:
     offers = parse_offers(TEXT, 1)
     accepted, _ = build_answer(offers, ledger)
     assert all("1999" in line or "2499" in line or "1.84" in line for line in accepted)
+
+
+TEXT_FEATURES = """Каталог магазина
+Модель X200 — 1 999 ₽ — в наличии
+Экран: 6,7 дюйма
+Память: 256 ГБ
+Модель X300 — 2 499 ₽ — нет в наличии
+"""
+
+
+@pytest.fixture
+def ledger_features(tmp_path: Path) -> Ledger:
+    led = Ledger(tmp_path / "ledger.jsonl")
+    led.add(url="https://shop.example/x200", status=200, content_type="text/html", text=TEXT_FEATURES)
+    return led
+
+
+def test_features_parsed_from_block(ledger_features: Ledger) -> None:
+    offers = parse_offers(TEXT_FEATURES, 1)
+    assert offers[0].features == {"Экран": "6,7 дюйма", "Память": "256 ГБ"}
+    assert offers[1].features == {}
+
+
+def test_features_verified(ledger_features: Ledger) -> None:
+    offer = parse_offers(TEXT_FEATURES, 1)[0]
+    assert verify_offer(offer, ledger_features) == []
+
+
+def test_substituted_feature_value_rejected(ledger_features: Ledger) -> None:
+    offer = parse_offers(TEXT_FEATURES, 1)[0]
+    offer.features["Память"] = "512 ГБ"
+    errors = verify_offer(offer, ledger_features)
+    assert any("512 ГБ" in e for e in errors)
+
+
+def test_invented_feature_key_rejected(ledger_features: Ledger) -> None:
+    offer = parse_offers(TEXT_FEATURES, 1)[0]
+    offer.features["Влагозащита"] = "IP68"
+    errors = verify_offer(offer, ledger_features)
+    assert any("Влагозащита" in e for e in errors)
+
+
+def test_features_appear_in_answer(ledger_features: Ledger) -> None:
+    accepted, _ = build_answer(parse_offers(TEXT_FEATURES, 1)[:1], ledger_features)
+    assert "Память: 256 ГБ" in accepted[0]

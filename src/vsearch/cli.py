@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .claims import ClaimError, claims_from_json
+from .dossier import SufficiencyError, check_dossier, summarize_dossier
 from .extract import html_to_text
 from .fetch import fetch
 from .ledger import Ledger
@@ -73,6 +74,26 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         print()
         print(receipt(claims, ledger))
     return 0 if report.ok else 1
+
+
+def _cmd_check(args: argparse.Namespace) -> int:
+    ledger = Ledger(args.ledger)
+    try:
+        payload = json.loads(Path(args.dossier).read_text(encoding="utf-8"))
+        dossier = check_dossier(
+            payload,
+            ledger,
+            min_coverage=args.min_coverage,
+            require_evidence=not args.no_evidence,
+        )
+    except (OSError, json.JSONDecodeError, SufficiencyError) as exc:
+        print(f"ОТКАЗ: досье не разобрано: {exc}", file=sys.stderr)
+        return 1
+    print(summarize_dossier(dossier))
+    if args.receipt:
+        Path(args.receipt).write_text(receipt(dossier.claims, ledger) + "\n", encoding="utf-8")
+        print(f"квитанция: {args.receipt}")
+    return 0 if dossier.ok else 1
 
 
 def _cmd_research(args: argparse.Namespace) -> int:
@@ -167,6 +188,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_verify.add_argument("--no-evidence", action="store_true", help="не требовать дословную цитату")
     p_verify.add_argument("--receipt", help="куда записать квитанцию (markdown)")
     p_verify.set_defaults(func=_cmd_verify)
+
+    p_check = sub.add_parser("check", help="проверить досье: утверждения, достаточность, покрытие вопросов")
+    p_check.add_argument("dossier")
+    p_check.add_argument("--ledger", default="data/ledger.jsonl")
+    p_check.add_argument("--min-coverage", type=float, default=1.0)
+    p_check.add_argument("--no-evidence", action="store_true")
+    p_check.add_argument("--receipt")
+    p_check.set_defaults(func=_cmd_check)
 
     p_research = sub.add_parser("research", help="раунды поиска и чтения с бюджетом")
     p_research.add_argument("questions", nargs="+")

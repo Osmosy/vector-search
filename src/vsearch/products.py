@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from .ledger import Ledger, LedgerError
-from .numbers import Number, extract_numbers
+from .numbers import Number, extract_numbers, normalize_number
 
 _CURRENCY_RE = re.compile(r"(₽|руб\.?|рублей|р\.|\$|€|usd|eur|rub)", re.IGNORECASE)
 _AVAILABILITY_WORDS = (
@@ -37,6 +37,7 @@ class Offer:
     availability: str = ""
     features: dict[str, str] = field(default_factory=dict)
     line: str = ""
+    block: str = ""
 
     @property
     def price_text(self) -> str:
@@ -66,10 +67,29 @@ def _money_in(text: str) -> Number | None:
     return None
 
 
+_FEATURE_RE = re.compile(r"^\s*([A-Za-zА-Яа-яЁё][\w\s\-]{1,30}?)\s*:\s*(.+?)\s*$")
+
+
+def _features_after(lines: list[str], index: int) -> dict[str, str]:
+    """Пары «параметр: значение» в блоке сразу после строки предложения."""
+    features: dict[str, str] = {}
+    for line in lines[index + 1 : index + 11]:
+        stripped = line.strip()
+        if not stripped:
+            break
+        if _money_in(stripped):
+            break  # началось следующее предложение
+        match = _FEATURE_RE.match(stripped)
+        if match:
+            features[match.group(1).strip()] = match.group(2).strip()
+    return features
+
+
 def parse_offers(text: str, source_id: int) -> list[Offer]:
-    """Разбор строк вида «Модель — 1 999 ₽ — в наличии»."""
+    """Разбор строк вида «Модель — 1 999 ₽ — в наличии» плюс характеристики блока."""
     offers: list[Offer] = []
-    for raw_line in text.splitlines():
+    lines = text.splitlines()
+    for index, raw_line in enumerate(lines):
         line = raw_line.strip()
         if not line:
             continue
@@ -90,7 +110,9 @@ def parse_offers(text: str, source_id: int) -> list[Offer]:
                 price=_money_in(price_part),
                 currency=_detect_currency(price_part),
                 availability=availability.strip().lower(),
+                features=_features_after(lines, index),
                 line=line,
+                block="\n".join(lines[index : index + 11]),
             )
         )
     return offers
@@ -132,6 +154,25 @@ def verify_offer(offer: Offer, ledger: Ledger) -> list[str]:
             if offer.currency == "EUR" and not re.search(r"€|eur", window, re.IGNORECASE):
                 errors.append("валюта EUR не подтверждена текстом")
 
+    for key, value in offer.features.items():
+        # Ищем в блоке предложения: у соседнего товара те же ключи с другими значениями.
+        scope = offer.block or text
+        if not re.search(re.escape(key), scope, re.IGNORECASE):
+            errors.append(f"характеристики «{key}» нет в тексте")
+            continue
+        window = re.search(
+            re.escape(key) + r"\s*:\s*(.{0,80})",
+            scope,
+            re.IGNORECASE,
+        )
+        fragment = window.group(1) if window else ""
+        value_found = value.lower() in fragment.lower()
+        if not value_found and offer.price is not None:
+            number = normalize_number(value)
+            value_found = number is not None and any(_same_value(n, number) for n in extract_numbers(fragment))
+        if not value_found:
+            errors.append(f"значения «{value}» у характеристики «{key}» нет в тексте")
+
     if offer.availability:
         if not _has_availability(offer.availability):
             errors.append("наличие не распознано")
@@ -165,5 +206,8 @@ def build_answer(offers: Iterable[Offer], ledger: Ledger) -> tuple[list[str], li
         price = f"{offer.price.value}" if offer.price else "—"
         currency = f" {offer.currency}" if offer.currency else ""
         availability = f" — {offer.availability}" if offer.availability else ""
-        accepted.append(f"{offer.name}: {price}{currency}{availability}")
+        features = ""
+        if offer.features:
+            features = " (" + "; ".join(f"{k}: {v}" for k, v in offer.features.items()) + ")"
+        accepted.append(f"{offer.name}: {price}{currency}{availability}{features}")
     return accepted, rejected
