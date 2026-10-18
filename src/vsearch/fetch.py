@@ -18,6 +18,7 @@ import httpx
 
 from .browser import BrowserError, Renderer
 from .extract import (
+    embedded_json_text,
     html_title,
     html_to_text,
     looks_like_captcha,
@@ -195,6 +196,14 @@ def fetch(
                 return result
 
             thin = len(text) < min_chars
+
+            if thin or js_shell:
+                # Встроенный JSON — дешевле браузера и точнее: значения как их отдал сайт.
+                embedded = embedded_json_text(html) if ctype != "application/pdf" else ""
+                if len(embedded) >= min_chars:
+                    result.text = embedded
+                    result.provider = "embedded-json"
+                    return result
 
             if (thin or js_shell) and allow_browser and renderer is not None:
                 try:

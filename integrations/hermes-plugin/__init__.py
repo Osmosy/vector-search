@@ -122,6 +122,7 @@ def vsearch_check(args: dict, **_: Any) -> str:
             "ok": dossier.ok,
             "coverage": dossier.report.coverage,
             "problems": dossier.report.errors,
+            "warnings": dossier.report.warnings,
             "uncovered": dossier.uncovered,
             "gaps": dossier.sufficiency.gaps,
             "summary": summarize_dossier(dossier),

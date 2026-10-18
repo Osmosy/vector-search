@@ -4,6 +4,9 @@ name: network
 
 on:
   workflow_dispatch:
+  schedule:
+    # Раз в неделю: внешние сайты меняются, падение здесь не должно блокировать PR.
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read

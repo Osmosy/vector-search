@@ -150,3 +150,35 @@ def test_browser_not_used_for_normal_page() -> None:
                    allow_browser=True, renderer=renderer)
     assert result.ok
     assert renderer.calls == []
+
+
+def test_embedded_json_read_without_browser() -> None:
+    # Страница без текста, но с schema.org Product внутри <script type="application/ld+json">.
+    html = (
+        "<html><body><div id=app></div>"
+        '<script type="application/ld+json">'
+        '{"@context":"https://schema.org","@type":"Product","name":"X200",'
+        '"offers":{"@type":"Offer","price":"1999","priceCurrency":"RUB",'
+        '"availability":"https://schema.org/InStock"}}'
+        "</script></body></html>"
+    )
+    client = _client(lambda request: httpx.Response(200, headers={"content-type": "text/html"}, text=html))
+    result = fetch("https://example.com/a", client=client, resolver=PUBLIC, min_chars=40)
+    assert result.ok, result.error
+    assert result.provider == "embedded-json"
+    assert "1999" in result.text and "RUB" in result.text
+
+
+def test_embedded_json_prefers_browser_when_too_short() -> None:
+    html = (
+        "<html><body><div id=app></div>"
+        '<script type="application/ld+json">{"@type":"Thing","name":"x"}</script>'
+        "</body></html>"
+    )
+    client = _client(lambda request: httpx.Response(200, headers={"content-type": "text/html"}, text=html))
+    renderer = FakeRenderer("Полный текст после рендера. " * 40)
+    result = fetch("https://example.com/a", client=client, resolver=PUBLIC,
+                   allow_browser=True, renderer=renderer, min_chars=200)
+    assert result.ok, result.error
+    assert result.provider == "browser:fake"
+    assert renderer.calls == ["https://example.com/a"]

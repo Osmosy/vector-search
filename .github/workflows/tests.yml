@@ -32,3 +32,10 @@ jobs:
 
       - name: Тесты
         run: uv run pytest -m "not network"
+
+      - name: Пакет собирается и импортируется
+        run: |
+          uv build
+          uv venv /tmp/wheel-check
+          uv pip install --python /tmp/wheel-check/bin/python dist/*.whl
+          /tmp/wheel-check/bin/python -c "import vsearch; from vsearch import fetch, verify, claims; print('ok')"

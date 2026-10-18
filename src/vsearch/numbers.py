@@ -99,6 +99,29 @@ def extract_numbers(text: str) -> list[Number]:
     return out
 
 
+# Единицы, из-за которых число идёт в решение: деньги, доли, дозировки, сроки.
+_CRITICAL_RE = re.compile(
+    r"""(?P<num>\d[\d \u00a0\u202f.,]*)\s*
+        (?P<unit>%|‰|₽|руб\w*|р\.|\$|€|usd|eur|руб/|мкг|мг|мл|кг|г(?![а-яё])|мс|сек\w*|мин\w*|ч\b|час\w*|дн\w*|сут\w*|нед\w*|мес\w*|год\w*|лет)""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def critical_reason(*texts: str) -> str | None:
+    """Почему число критично: первая критичная единица в тексте или числах.
+
+    Возвращает фрагмент («1 999 ₽», «15 %», «5 мг»), чтобы сообщение об отказе
+    объясняло, откуда взялось требование второго источника, — или None.
+    """
+    for text in texts:
+        if not text:
+            continue
+        m = _CRITICAL_RE.search(str(text))
+        if m:
+            return f"{m.group('num').strip()} {m.group('unit')}"
+    return None
+
+
 def normalize_number(text: str) -> Number | None:
     """Первое число строки, если строка — это только число с единицей."""
     nums = extract_numbers(text)

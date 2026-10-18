@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -133,6 +134,54 @@ def looks_like_captcha(text: str, headers: dict[str, str] | None = None) -> bool
             if key in {k.lower() for k in headers}:
                 return True
     return False
+
+
+_JSON_SCRIPT_RE = re.compile(
+    r"""<script[^>]*(?:type=["']application/ld\+json["']|id=["']__NEXT_DATA__["'])[^>]*>
+        (?P<body>.*?)</script>""",
+    re.VERBOSE | re.DOTALL | re.IGNORECASE,
+)
+_MAX_EMBEDDED_LINES = 400
+_MAX_EMBEDDED_VALUE = 300
+
+
+def _flatten_json(obj, prefix: str, out: list[str], depth: int = 0) -> None:
+    if len(out) >= _MAX_EMBEDDED_LINES or depth > 8:
+        return
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            # "@graph" и "@type" несут содержимое; "@context"/"@id" — только адреса.
+            if str(key) in {"@context", "@id"}:
+                continue
+            _flatten_json(value, f"{prefix}.{key}" if prefix else str(key), out, depth + 1)
+    elif isinstance(obj, list):
+        for item in obj:
+            _flatten_json(item, prefix, out, depth + 1)
+    elif isinstance(obj, (str, int, float)) and not isinstance(obj, bool):
+        value = str(obj).strip()
+        if not value or len(value) > _MAX_EMBEDDED_VALUE:
+            return
+        out.append(f"{prefix}: {value}")
+
+
+def embedded_json_text(html: str) -> str:
+    """Текст из встроенного JSON: schema.org (ld+json) и Next.js (__NEXT_DATA__).
+
+    Часть страниц отдаёт содержимое не в разметке, а в JSON внутри `<script>`.
+    Читать его честнее, чем рендерить страницу: значения приходят ровно те,
+    что опубликовал сайт, без подстановок браузера.
+    """
+    lines: list[str] = []
+    for match in _JSON_SCRIPT_RE.finditer(html):
+        body = match.group("body").strip()
+        if not body:
+            continue
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            continue
+        _flatten_json(payload, "", lines)
+    return "\n".join(lines)
 
 
 def looks_like_js_placeholder(text: str) -> bool:

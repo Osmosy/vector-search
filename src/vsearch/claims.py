@@ -13,7 +13,7 @@ from typing import Any
 
 from .domains import registrable_domain
 from .ledger import Ledger, LedgerError
-from .numbers import numbers_in_text
+from .numbers import critical_reason, numbers_in_text
 
 MIN_QUOTE_WORDS = 3
 
@@ -49,6 +49,9 @@ class Claim:
     quote: str = ""
     numbers: list[str] = field(default_factory=list)
     critical: bool = False
+    # declared — модель указала явно; inferred — выведено по единицам; default — обычное число.
+    critical_source: str = "default"
+    critical_reason: str = ""
 
     @classmethod
     def from_mapping(cls, obj: Mapping[str, Any], *, index: int | None = None) -> Claim:
@@ -69,13 +72,26 @@ class Claim:
         numbers = obj.get("numbers") or []
         if not isinstance(numbers, (list, tuple)):
             raise ClaimError("numbers должен быть списком")
+        number_list = [str(n) for n in numbers]
+        reason = critical_reason(text, *number_list)
+        if "critical" in obj:
+            critical = bool(obj["critical"])
+            source = "declared"
+        elif reason:
+            critical = True
+            source = "inferred"
+        else:
+            critical = False
+            source = "default"
         return cls(
             id=int(obj.get("id", index if index is not None else 0)),
             text=text,
             source_ids=source_ids,
             quote=str(obj.get("quote") or "").strip(),
-            numbers=[str(n) for n in numbers],
-            critical=bool(obj.get("critical", False)),
+            numbers=number_list,
+            critical=critical,
+            critical_source=source,
+            critical_reason=reason or "",
         )
 
 
@@ -158,9 +174,15 @@ def _check_independence(
             if domain:
                 domains.add(domain)
         if len(domains) < required:
+            origin = ""
+            if claim.critical_source == "inferred":
+                origin = (
+                    f" (критичность выведена по «{claim.critical_reason}»; "
+                    "если число не критично, укажите critical: false)"
+                )
             errors.append(
                 f"критичное число {number} подтверждено {len(domains)} независимыми "
-                f"источниками из {required}: {', '.join(sorted(domains)) or '—'}"
+                f"источниками из {required}: {', '.join(sorted(domains)) or '—'}{origin}"
             )
     return errors
 
