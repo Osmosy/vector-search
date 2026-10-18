@@ -1,3 +1,4 @@
+# Правка этого файла требует токена с правом Workflows (fine-grained PAT).
 name: tests
 
 on:
