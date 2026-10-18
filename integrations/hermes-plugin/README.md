@@ -5,15 +5,19 @@
 ## Установка
 
 ```bash
+# библиотека — в окружение Hermes (editable: правки в репозитории видны сразу)
+uv pip install --python ~/.hermes/hermes-agent/venv/bin/python -e ~/projects/vector-search
 ln -s ~/projects/vector-search/integrations/hermes-plugin ~/.hermes/plugins/vector-search
 hermes plugins enable vector-search
-systemctl --user restart hermes-gateway   # инструменты читаются при старте
+# инструменты читаются при старте: перезагрузка модуля без рестарта — disable + enable
+hermes plugins disable vector-search && hermes plugins enable vector-search
 hermes tools list | grep vector_search
 ```
 
-Библиотека берётся из исходников репозитория: `VSEARCH_SRC` (по умолчанию
-`~/projects/vector-search/src`). Журнал — `VSEARCH_LEDGER` (по умолчанию
-`~/.hermes/vector-search/ledger.jsonl`).
+Плагин сначала пробует `import vsearch` — установленный пакет важнее исходников рядом.
+Если пакета нет, берёт код из `VSEARCH_SRC` (по умолчанию `~/projects/vector-search/src`).
+Откуда взялся код, видно в `vsearch_status` → поле `library`.
+Журнал — `VSEARCH_LEDGER` (по умолчанию `~/.hermes/vector-search/ledger.jsonl`).
 
 ## Что делают инструменты
 

@@ -107,6 +107,18 @@ _CRITICAL_RE = re.compile(
 )
 
 
+# Сравнения без единиц: «в 3 раза», «вдвое», «каждый второй», «половина».
+# Это тоже числа, на которых принимают решение, но записаны словами.
+_MULTIPLIER_RE = re.compile(
+    r"""(?:\bв\s+\d+(?:[.,]\d+)?\s*раз(?:а)?\b
+        |\bвдвое\b|\bвтрое\b|\bвчетверо\b|\bвпятеро\b|\bвшестеро\b|\bвдесятеро\b
+        |\bкажды[йй]\s+(?:\d+-?(?:й|го|му|м)?|втор\w*|трет\w*|четв[её]рт\w*|пят\w*|шест\w*|седьм\w*|восьм\w*|девят\w*|десят\w*)
+        |\bполовин\w*|\bтрет\w*|\bчетверт\w*
+        |\bдве\s+трети\b|\bтри\s+четверти\b)""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
 def critical_reason(*texts: str) -> str | None:
     """Почему число критично: первая критичная единица в тексте или числах.
 
@@ -118,7 +130,18 @@ def critical_reason(*texts: str) -> str | None:
             continue
         m = _CRITICAL_RE.search(str(text))
         if m:
-            return f"{m.group('num').strip()} {m.group('unit')}"
+            unit = m.group("unit")
+            value = parse_body(m.group("num"))
+            # Год — срок, если он короткий; «в 2020 году» — дата, а не срок.
+            if unit.lower().startswith(("год", "лет")) and value is not None and abs(value) > 100:
+                m = _CRITICAL_RE.search(str(text)[m.end():])
+                if not m:
+                    continue
+                unit = m.group("unit")
+            return f"{m.group('num').strip()} {unit}"
+        m = _MULTIPLIER_RE.search(str(text))
+        if m:
+            return m.group(0).strip()
     return None
 
 

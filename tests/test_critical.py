@@ -29,6 +29,28 @@ def test_features_are_not_critical(text: str) -> None:
     assert critical_reason(text) is None
 
 
+@pytest.mark.parametrize(
+    "text",
+    ["в 3 раза дешевле", "вдвое быстрее", "каждый второй респондент",
+     "половина клиентов", "две трети рынка", "третий квартал"],
+)
+def test_comparisons_without_units_are_critical(text: str) -> None:
+    # Решение принимают и по «в 3 раза», где единицы нет вовсе.
+    assert critical_reason(text) is not None
+
+
+@pytest.mark.parametrize("text", ["каждый пользователь", "каждый день недели"])
+def test_every_without_order_is_not_critical(text: str) -> None:
+    # «Каждый второй» — доля, «каждый пользователь» — просто квантор.
+    assert critical_reason(text) is None
+
+
+def test_year_as_date_is_not_a_deadline() -> None:
+    # «в 2020 году» — дата публикации, «срок 2 года» — срок.
+    assert critical_reason("опубликовано в 2020 году") is None
+    assert critical_reason("срок 2 года") is not None
+
+
 def test_claim_without_flag_gets_critical_inferred() -> None:
     claim = Claim.from_mapping({"text": "Цена 1 999 ₽", "source_ids": [1], "quote": "цена 1 999 ₽"})
     assert claim.critical is True

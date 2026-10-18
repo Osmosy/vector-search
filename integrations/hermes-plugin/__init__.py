@@ -16,8 +16,22 @@ from typing import Any
 __version__ = "0.4.0"
 
 _SRC = Path(os.getenv("VSEARCH_SRC", "~/projects/vector-search/src")).expanduser()
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
+
+
+def _load_vsearch() -> str:
+    """Пакет, установленный в окружение, важнее исходников рядом.
+
+    Возвращает пояснение, откуда взят код, чтобы это было видно в vsearch_status.
+    """
+    try:
+        import vsearch  # noqa: F401
+
+        return f"установленный пакет: {Path(vsearch.__file__).parent}"
+    except ImportError:
+        pass
+    if str(_SRC) not in sys.path:
+        sys.path.insert(0, str(_SRC))
+    return f"исходники: {_SRC}"
 
 LEDGER_ENV = "VSEARCH_LEDGER"
 DEFAULT_LEDGER = "~/.hermes/vector-search/ledger.jsonl"
@@ -27,7 +41,13 @@ def _ledger_path() -> Path:
     return Path(os.getenv(LEDGER_ENV, DEFAULT_LEDGER)).expanduser()
 
 
+_LIBRARY_NOTE = ""
+
+
 def _ledger():
+    global _LIBRARY_NOTE
+    if not _LIBRARY_NOTE:
+        _LIBRARY_NOTE = _load_vsearch()
     from vsearch.ledger import Ledger
 
     path = _ledger_path()
@@ -145,6 +165,7 @@ def vsearch_status(args: dict, **_: Any) -> str:
     return _ok(
         {
             "ok": True,
+            "library": _load_vsearch(),
             "ledger": str(_ledger_path()),
             "total": len(sources),
             "read": sum(1 for s in sources if s.ok),
