@@ -1,0 +1,14 @@
+# данные прогонов: журнал, тексты, квитанции
+data/
+store/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# локальные заметки
+.DS_Store
+*.local
